@@ -34,9 +34,9 @@ export default defineConfig({
   use: {
     trace: 'on-first-retry',
     browserName: 'chromium',
-    headless: false,
-    screenshot: 'on',
-    video: 'on'
+    // headless: false,
+    // screenshot: 'on',
+    // video: 'on'
   },
 
   projects: [
