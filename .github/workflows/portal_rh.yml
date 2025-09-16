@@ -1,48 +1,47 @@
 name: Porta RH Test E2E
 
-on: [workflow_dispatch, pull_request]
+trigger:
+  - main  # ou a branch que quiser monitorar
 
-jobs:
-  test:
-    name: test
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+pr:
+  - main  # ativa em pull requests
 
-      - name: Install Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
+pool:
+  vmImage: 'ubuntu-latest'
 
-      - name: Install dependencies
-        if: always()
-        run: |
-          npm install
+stages:
+  - stage: Test
+    displayName: Test E2E
+    jobs:
+      - job: test
+        displayName: Run Playwright Tests
+        timeoutInMinutes: 60
+        steps:
+          - checkout: self
 
-      - name: Install Browsers
-        if: always()
-        run: |
-          npx playwright install
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '18.x'
+            displayName: 'Install Node.js'
 
-      - name: Install CTRF Json Reporter
-        run: |
-          npm install playwright-ctrf-json-reporter
+          - script: npm install
+            displayName: 'Install dependencies'
 
-      - name: Run E2E tests
-        run: |
-          npx playwright test
+          - script: npx playwright install
+            displayName: 'Install browsers'
 
-      - name: Publish Test Results Summary
-        if: always()
-        run: |
-          npx github-actions-ctrf playwright-report/tests-results.json
+          - script: npm install playwright-ctrf-json-reporter
+            displayName: 'Install CTRF Json Reporter'
 
-      - name: Publish Report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
+          - script: npx playwright test
+            displayName: 'Run E2E tests'
+
+          - script: npx github-actions-ctrf playwright-report/tests-results.json
+            displayName: 'Publish Test Results Summary'
+            continueOnError: true
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: 'playwright-report'
+              ArtifactName: 'playwright-report'
+              publishLocation: 'Container'
