@@ -1,12 +1,16 @@
 name: Porta RH Test E2E
 
-on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+trigger:
+  branches:
+    include:
+      - main
+      - master
+pr:
+  branches:
+    include:
+      - main
+      - master
 
-    
 jobs:
   test:
     name: Porta RH Test E2E
