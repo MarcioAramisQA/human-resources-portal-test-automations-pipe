@@ -64,9 +64,14 @@ jobs:
         publishLocation: "Container"
 
     - script: |
-        if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
-          echo "##vso[task.logissue type=error]Testes instáveis detectados (flaky)."
-          exit 1
+        if [ -f test-results.json ]; then
+          if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
+            echo "##vso[task.logissue type=error]Testes instáveis detectados (flaky)."
+            exit 1
+          fi
+        else
+          echo "Arquivo test-results.json não encontrado. Pulando verificação de flaky tests."
         fi
       displayName: "Falhar em testes instáveis"
       condition: succeeded()
+
