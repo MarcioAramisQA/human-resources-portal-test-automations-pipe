@@ -1,47 +1,75 @@
 name: Porta RH Test E2E
 
-trigger:
-  - main  # ou a branch que quiser monitorar
+on: [workflow_dispatch, pull_request]
 
-pr:
-  - main  # ativa em pull requests
+jobs:
+  test:
+    name: Porta RH Test E2E
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    test:
+    permissions:
+      contents: read
+      checks: write
 
-pool:
-  vmImage: 'ubuntu-latest'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
-stages:
-  - stage: Test
-    displayName: Test E2E
-    jobs:
-      - job: test
-        displayName: Run Playwright Tests
-        timeoutInMinutes: 60
-        steps:
-          - checkout: self
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
 
-          - task: NodeTool@0
-            inputs:
-              versionSpec: '18.x'
-            displayName: 'Install Node.js'
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+        path: ~/.npm # Cache a pasta de cache do npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
 
-          - script: npm install
-            displayName: 'Install dependencies'
+      - name: Install dependencies
+        if: always()
+        run: |
+          npm install
 
-          - script: npx playwright install
-            displayName: 'Install browsers'
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+        path: ~/.cache/ms-playwright # Cache a pasta onde o Playwright instala os navegadores
+        key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-playwright-
 
-          - script: npm install playwright-ctrf-json-reporter
-            displayName: 'Install CTRF Json Reporter'
+      - name: Install Browsers
+        if: always()
+        run: |
+          npx playwright install
 
-          - script: npx playwright test
-            displayName: 'Run E2E tests'
+      - name: Run E2E tests
+        run: |
+          npx playwright test
+        env:
+          CONNECT_MGR: ${{ secrets.CONNECT_MGR }}
+          CONNECT_HRA: ${{ secrets.CONNECT_HRA }}
+          CONNECT_PASSWORD: ${{ secrets.CONNECT_PASSWORD }}
+          CONNECT_URL: ${{ secrets.CONNECT_URL }}
+        
+      - name: Publish Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
-          - script: npx github-actions-ctrf playwright-report/tests-results.json
-            displayName: 'Publish Test Results Summary'
-            continueOnError: true
-
-          - task: PublishBuildArtifacts@1
-            inputs:
-              PathtoPublish: 'playwright-report'
-              ArtifactName: 'playwright-report'
-              publishLocation: 'Container'
+      - name: Fail on flaky tests
+        if: ${{ steps.run_tests.outcome == 'success' }}
+        run: |
+          if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
+            echo "::error::Testes instáveis detectados (flaky)."
+            exit 1
+          fi
