@@ -41,7 +41,7 @@ jobs:
           ${{ runner.os }}-node-
 
       - name: Install dependencies
-        if: always()
+        condition: always()
         run: |
           npm install
 
@@ -54,7 +54,7 @@ jobs:
           ${{ runner.os }}-playwright-
 
       - name: Install Browsers
-        if: always()
+        condition: always()
         run: |
           npx playwright install
 
@@ -69,14 +69,14 @@ jobs:
         
       - name: Publish Report
         uses: actions/upload-artifact@v4
-        if: always()
+        condition: always()
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
 
       - name: Fail on flaky tests
-        if: ${{ steps.run_tests.outcome == 'success' }}
+        condition: ${{ steps.run_tests.outcome == 'success' }}
         run: |
           if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
             echo "::error::Testes instáveis detectados (flaky)."
