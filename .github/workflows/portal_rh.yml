@@ -1,84 +1,72 @@
-name: Porta RH Test E2E
-
 trigger:
   branches:
     include:
       - main
       - master
+
 pr:
   branches:
     include:
       - main
       - master
 
+pool:
+  vmImage: "ubuntu-latest"
+
 jobs:
-  test:
-    name: Porta RH Test E2E
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-    test:
-    permissions:
-      contents: read
-      checks: write
+- job: test
+  displayName: "Porta RH Test E2E"
+  timeoutInMinutes: 60
+  steps:
+    - checkout: self
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+    - task: NodeTool@0
+      displayName: "Instalar Node.js"
+      inputs:
+        versionSpec: "18.x"
 
-      - name: Install Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
+    - task: Cache@2
+      displayName: "Cache node modules"
+      inputs:
+        key: 'npm | "$(Agent.OS)" | package-lock.json'
+        path: ~/.npm
+        restoreKeys: |
+          npm | "$(Agent.OS)"
 
-      - name: Cache node modules
-        uses: actions/cache@v4
-        with:
-        path: ~/.npm # Cache a pasta de cache do npm
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-
+    - script: npm install
+      displayName: "Instalar dependências"
 
-      - name: Install dependencies
-        condition: always()
-        run: |
-          npm install
+    - task: Cache@2
+      displayName: "Cache Playwright browsers"
+      inputs:
+        key: 'playwright | "$(Agent.OS)" | package-lock.json'
+        path: ~/.cache/ms-playwright
+        restoreKeys: |
+          playwright | "$(Agent.OS)"
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        with:
-        path: ~/.cache/ms-playwright # Cache a pasta onde o Playwright instala os navegadores
-        key: ${{ runner.os }}-playwright-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-playwright-
+    - script: npx playwright install --with-deps
+      displayName: "Instalar Browsers Playwright"
 
-      - name: Install Browsers
-        condition: always()
-        run: |
-          npx playwright install
+    - script: npx playwright test
+      displayName: "Rodar E2E tests"
+      env:
+        CONNECT_MGR: $(CONNECT_MGR)
+        CONNECT_HRA: $(CONNECT_HRA)
+        CONNECT_PASSWORD: $(CONNECT_PASSWORD)
+        CONNECT_URL: $(CONNECT_URL)
 
-      - name: Run E2E tests
-        run: |
-          npx playwright test
-        env:
-          CONNECT_MGR: ${{ secrets.CONNECT_MGR }}
-          CONNECT_HRA: ${{ secrets.CONNECT_HRA }}
-          CONNECT_PASSWORD: ${{ secrets.CONNECT_PASSWORD }}
-          CONNECT_URL: ${{ secrets.CONNECT_URL }}
-        
-      - name: Publish Report
-        uses: actions/upload-artifact@v4
-        condition: always()
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
+    - task: PublishBuildArtifacts@1
+      displayName: "Publicar relatório Playwright"
+      condition: always()
+      inputs:
+        PathtoPublish: "playwright-report"
+        ArtifactName: "playwright-report"
+        publishLocation: "Container"
 
-      - name: Fail on flaky tests
-        condition: ${{ steps.run_tests.outcome == 'success' }}
-        run: |
-          if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
-            echo "::error::Testes instáveis detectados (flaky)."
-            exit 1
-          fi
+    - script: |
+        if jq -e '[.suites[] | (.tests // [])[] | select((.results // [] | length) > 1)] | length > 0' test-results.json > /dev/null; then
+          echo "##vso[task.logissue type=error]Testes instáveis detectados (flaky)."
+          exit 1
+        fi
+      displayName: "Falhar em testes instáveis"
+      condition: succeeded()
