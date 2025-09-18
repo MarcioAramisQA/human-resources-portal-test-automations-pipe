@@ -19,22 +19,14 @@ jobs:
   timeoutInMinutes: 60
   steps:
     - checkout: self
+      clean: 'true'
 
     - task: NodeTool@0
-      displayName: "Instalar Node.js"
       inputs:
-        versionSpec: "18.x"
+          versionSpec: '20.x'
 
-    - task: Cache@2
-      displayName: "Cache node modules"
-      inputs:
-        key: 'npm | "$(Agent.OS)" | package-lock.json'
-        path: ~/.npm
-        restoreKeys: |
-          npm | "$(Agent.OS)"
-
-    - script: npm install
-      displayName: "Instalar dependências"
+    - script: npm i
+      displayName: Install dependencies
 
     - task: Cache@2
       displayName: "Cache Playwright browsers"
@@ -47,7 +39,9 @@ jobs:
     - script: npx playwright install --with-deps
       displayName: "Instalar Browsers Playwright"
 
-    - script: npx playwright test
+    - script: |
+            mkdir -p onlyTest
+            npx playwright test
       displayName: "Rodar E2E tests"
       env:
         CONNECT_MGR: $(CONNECT_MGR)
@@ -56,12 +50,20 @@ jobs:
         CONNECT_URL: $(CONNECT_URL)
 
     - task: PublishBuildArtifacts@1
-      displayName: "Publicar relatório Playwright"
-      condition: always()
       inputs:
-        PathtoPublish: "playwright-report"
-        ArtifactName: "playwright-report"
-        publishLocation: "Container"
+          PathtoPublish: 'playwright-report'
+          ArtifactName: 'playwright-report'
+          publishLocation: 'Container'
+      condition: always()
+      displayName: 'Publish Playwright Report'
+
+    - task: PublishTestResults@2
+      inputs:
+          testResultsFormat: 'JUnit'
+          testResultsFiles: 'onlyTest/TEST-*.xml'
+          failTaskOnFailedTests: true
+      condition: always()
+      displayName: 'Publish Test Results'
 
     - script: |
         if [ -f test-results.json ]; then
